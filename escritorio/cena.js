@@ -271,8 +271,10 @@ $('#equipe').addEventListener('click', (e) => {
 let detalheAberto = null;
 function abrirDetalhe(f) {
   if (!f) return;
-  detalheAberto = f.membro.id;
   const a = estado.agentes.find((x) => x.id === f.membro.id);
+  // O terminal só é montado ao abrir outro funcionário; nas atualizações a cada 2 s só os dados mudam
+  if (detalheAberto !== a.id) montarTerminal(a);
+  detalheAberto = a.id;
   const andar = estado.andares.find((x) => x.numero === a.andar);
   const s = a.status ?? {};
   const linha = (rotulo, valor) => (valor != null && valor !== '' ? `<dt>${rotulo}</dt><dd>${valor}</dd>` : '');
@@ -305,7 +307,100 @@ function abrirDetalhe(f) {
 $('#detalhe .fechar').addEventListener('click', () => {
   $('#detalhe').hidden = true;
   detalheAberto = null;
+  montarTerminal(null);
 });
+
+// ---------- Terminal do funcionário (só no escritório local) ----------
+let fluxoTerminal = null;
+
+function montarTerminal(a) {
+  fluxoTerminal?.close();
+  fluxoTerminal = null;
+  const area = $('#detalhe .area-terminal');
+  $('#detalhe').classList.toggle('com-terminal', Boolean(a?.terminal));
+  if (!a?.terminal) {
+    area.innerHTML = '';
+    return;
+  }
+
+  area.innerHTML = `
+    <h3>Terminal</h3>
+    <div class="terminal" role="log" aria-live="polite">
+      <div class="saida"></div>
+      <form class="linha-comando" autocomplete="off">
+        <label for="comando-terminal">${esc(a.terminal.prompt)}</label>
+        <input id="comando-terminal" spellcheck="false" placeholder="${esc(a.terminal.exemplo)}">
+      </form>
+    </div>`;
+  const saida = area.querySelector('.saida');
+  const form = area.querySelector('form');
+  const input = area.querySelector('input');
+
+  const escrever = (texto, fluxo = 'sistema') => {
+    const div = document.createElement('div');
+    div.className = `l-${fluxo}`;
+    div.textContent = texto;
+    saida.append(div);
+    saida.scrollTop = saida.scrollHeight;
+  };
+  const ajuda = () => {
+    escrever(`Digite o que o ${a.nome} deve buscar no Google Maps. Exemplos:`);
+    escrever(`  ${a.terminal.exemplo}`);
+    escrever('  Academias em Pinheiros --headless   (sem abrir a janela do navegador)');
+    escrever('Comandos: parar · limpar · ajuda');
+  };
+
+  if (PUBLICO) {
+    escrever('O terminal só funciona no escritório local.');
+    escrever('No seu computador: npm run escritorio → http://localhost:3333');
+    input.disabled = true;
+    input.placeholder = 'Indisponível na versão pública';
+    return;
+  }
+
+  ajuda();
+  fluxoTerminal = new EventSource(`/api/terminal/${a.id}`);
+  fluxoTerminal.onmessage = (e) => {
+    const ev = JSON.parse(e.data);
+    if (ev.tipo === 'linha') escrever(ev.texto, ev.fluxo);
+    if (ev.tipo === 'estado') {
+      area.querySelector('.terminal').classList.toggle('rodando', ev.rodando);
+      input.placeholder = ev.rodando ? 'Rodando… digite "parar" para interromper' : a.terminal.exemplo;
+    }
+  };
+
+  const historico = [];
+  let posicao = 0;
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    posicao = Math.max(0, Math.min(historico.length, posicao + (e.key === 'ArrowUp' ? -1 : 1)));
+    input.value = historico[posicao] ?? '';
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const comando = input.value.trim();
+    if (!comando) return;
+    historico.push(comando);
+    posicao = historico.length;
+    input.value = '';
+    if (comando === 'limpar') return void (saida.innerHTML = '');
+    if (comando === 'ajuda') return ajuda();
+    try {
+      const resp = await fetch(`/api/terminal/${a.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comando }),
+      });
+      const r = await resp.json();
+      if (!r.ok && r.mensagem) escrever(r.mensagem, 'erro');
+    } catch {
+      escrever('Sem conexão com o servidor do escritório.', 'erro');
+    }
+  });
+  setTimeout(() => input.focus(), 50);
+}
 
 // Clique direto no bonequinho (só nos andares à mostra)
 const raio = new THREE.Raycaster();
