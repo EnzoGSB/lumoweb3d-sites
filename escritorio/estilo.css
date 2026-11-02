@@ -70,7 +70,7 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.92em; color:
 .painel h2::before { content: ''; width: 8px; height: 8px; background: var(--laranja); }
 .painel ul { list-style: none; margin: 0; padding: 0; }
 
-.equipe { display: grid; gap: 6px; }
+.equipe { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .membro {
   width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px; text-align: left;
   background: #fff; border: 1px solid var(--borda); border-radius: 10px; cursor: pointer;
