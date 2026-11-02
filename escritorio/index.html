@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Escritório LUMOWEB3D</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23fbbf24'/><rect x='9' y='7' width='6' height='18' fill='%23111'/><rect x='9' y='19' width='14' height='6' fill='%23111'/></svg>">
+  <link rel="stylesheet" href="estilo.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/build/three.module.js",
+        "three/addons/": "./vendor/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main id="palco"></main>
+
+  <header class="topo">
+    <div class="marca">
+      <span class="logo">L</span>
+      <div><b>Escritório LUMOWEB<em>3D</em></b><small>Agência de agentes · <span id="relogio">--:--</span><span id="atualizado"></span></small></div>
+    </div>
+    <dl class="metricas">
+      <div><dt>Leads</dt><dd id="m-leads">–</dd></div>
+      <div><dt>Sites no ar</dt><dd id="m-sites" class="verde">–</dd></div>
+      <div><dt>Na fila</dt><dd id="m-fila" class="amarelo">–</dd></div>
+      <div><dt>Trabalhando</dt><dd id="m-ativos">–</dd></div>
+    </dl>
+  </header>
+
+  <aside class="painel">
+    <section>
+      <h2>Equipe</h2>
+      <ul id="equipe" class="equipe"></ul>
+    </section>
+    <section>
+      <h2>Sites publicados</h2>
+      <ul id="sites" class="sites"></ul>
+    </section>
+    <section class="cresce">
+      <h2>Atividade</h2>
+      <ul id="atividade" class="atividade"></ul>
+    </section>
+  </aside>
+
+  <div id="detalhe" class="detalhe" hidden>
+    <button class="fechar" aria-label="Fechar">×</button>
+    <div class="conteudo"></div>
+  </div>
+
+  <p class="dica">Arraste para girar · botão direito move · roda dá zoom · clique num funcionário</p>
+  <p class="aviso-offline">Sem conexão com o servidor do escritório…</p>
+
+  <script type="module" src="cena.js"></script>
+</body>
+</html>
