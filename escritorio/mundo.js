@@ -159,37 +159,15 @@ function quadro(pai, w, h, x, y, z, rotY, borda) {
   return tela;
 }
 
-export function criarEscritorio(cena, equipe) {
-  const mundo = new THREE.Group();
-  cena.add(mundo);
+// ---------- Prédio ----------
 
-  // Piso e rodapé
-  const piso = new THREE.Mesh(
-    new THREE.BoxGeometry(SALA.x * 2, 0.2, SALA.z * 2),
-    new THREE.MeshStandardMaterial({ map: texturaPiso(), roughness: 0.75 }),
-  );
-  piso.position.y = -0.1;
-  piso.receiveShadow = true;
-  mundo.add(piso);
-  bloco(mundo, SALA.x * 2 + 0.3, 0.3, 0.3, '#3b3b3f', 0, -0.05, SALA.z + 0.15);
-  bloco(mundo, 0.3, 0.3, SALA.z * 2 + 0.3, '#3b3b3f', SALA.x + 0.15, -0.05, 0);
+export const ALTURA_ANDAR = SALA.alturaParede + 0.2;
 
-  // Paredes
-  const parede = mat('#eeeae4');
-  bloco(mundo, SALA.x * 2 + 0.3, SALA.alturaParede, 0.3, parede, 0, SALA.alturaParede / 2, -SALA.z - 0.15);
-  bloco(mundo, 0.3, SALA.alturaParede, SALA.z * 2, parede, -SALA.x - 0.15, SALA.alturaParede / 2, 0);
-  bloco(mundo, SALA.x * 2, 0.18, 0.06, '#8a6a4a', 0, 0.09, -SALA.z + 0.03);
-  bloco(mundo, 0.06, 0.18, SALA.z * 2, '#8a6a4a', -SALA.x + 0.03, 0.09, 0);
-  // Faixa de madeira na parede esquerda (como um painel ripado)
-  for (let i = 0; i < 26; i++) bloco(mundo, 0.06, 2.6, 0.22, i % 2 ? '#a77b52' : '#b5875c', -SALA.x + 0.04, 1.3, -6.6 + i * 0.25);
-
-  const vidros = [-7.4, 2.5, 7.6].map((x) => janela(mundo, x));
-
-  // Letreiro da empresa
-  // Placa clara (a logo original só vai sobre fundo claro) com moldura azul-marinho
-  const letreiro = quadro(mundo, 3.6, 0.8, -2.6, 3.3, -SALA.z + 0.1, 0, COR.marinho);
+// Placa clara (a logo original só vai sobre fundo claro) com moldura azul-marinho
+function letreiro(pai, texto) {
+  const placa = quadro(pai, 3.6, 0.8, -2.6, 3.3, -SALA.z + 0.1, 0, COR.marinho);
   marcaPronta.then(() => {
-    const { ctx, canvas, textura } = letreiro;
+    const { ctx, canvas, textura } = placa;
     ctx.fillStyle = COR.branco;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(logo, 14, 8, 144, 144);
@@ -197,18 +175,57 @@ export function criarEscritorio(cena, equipe) {
     ctx.font = `800 60px ${FONTE_TITULO}`;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    ctx.fillText('LUMO WEB 3D', 176, 84);
+    ctx.fillText(texto, 176, 84);
     textura.needsUpdate = true;
   });
+}
 
-  // TV de métricas e relógio
-  const tv = quadro(mundo, 2.6, 1.45, -2.6, 1.95, -SALA.z + 0.1, 0, '#0b1726');
-  const relogio = quadro(mundo, 0.7, 0.7, 5.1, 3.25, -SALA.z + 0.1, 0, '#2a2a2a');
+// Piso, paredes, janelas, letreiro, TV e relógio — iguais em todos os andares
+function estrutura(g, andar, xJanelas) {
+  const piso = new THREE.Mesh(
+    new THREE.BoxGeometry(SALA.x * 2, 0.2, SALA.z * 2),
+    new THREE.MeshStandardMaterial({ map: texturaPiso(), roughness: 0.75 }),
+  );
+  piso.position.y = -0.1;
+  piso.receiveShadow = true;
+  piso.castShadow = true;
+  g.add(piso);
+  // Borda da laje na frente, com o número do andar
+  bloco(g, SALA.x * 2 + 0.3, 0.3, 0.3, '#3b3b3f', 0, -0.05, SALA.z + 0.15);
+  bloco(g, 0.3, 0.3, SALA.z * 2 + 0.3, '#3b3b3f', SALA.x + 0.15, -0.05, 0);
 
-  // Quadro branco com o fluxo da equipe (parede esquerda)
-  const fluxo = quadro(mundo, 3.2, 1.6, -SALA.x + 0.12, 2.2, 1.6, Math.PI / 2, '#b8bcc4');
+  const parede = mat('#eeeae4');
+  bloco(g, SALA.x * 2 + 0.3, SALA.alturaParede, 0.3, parede, 0, SALA.alturaParede / 2, -SALA.z - 0.15);
+  bloco(g, 0.3, SALA.alturaParede, SALA.z * 2, parede, -SALA.x - 0.15, SALA.alturaParede / 2, 0);
+  bloco(g, SALA.x * 2, 0.18, 0.06, '#8a6a4a', 0, 0.09, -SALA.z + 0.03);
+  bloco(g, 0.06, 0.18, SALA.z * 2, '#8a6a4a', -SALA.x + 0.03, 0.09, 0);
 
-  // Estante (parede esquerda)
+  const vidros = xJanelas.map((x) => janela(g, x));
+  letreiro(g, andar.placa);
+  const tv = quadro(g, 2.6, 1.45, -2.6, 1.95, -SALA.z + 0.1, 0, '#0b1726');
+  const relogio = quadro(g, 0.7, 0.7, 5.1, 3.25, -SALA.z + 0.1, 0, '#2a2a2a');
+  return { vidros, tv, relogio };
+}
+
+function mesasDoAndar(g, equipe) {
+  const mesas = new Map();
+  equipe.forEach((membro, i) => {
+    const mesa = mesaDeTrabalho(g, POSICOES_MESA[i] ?? i * 5 - 5, membro.cor);
+    if (membro.vaga) placaVaga(mesa);
+    mesas.set(membro.id, mesa);
+  });
+  return mesas;
+}
+
+// ---------- 01 · Marketing & Web ----------
+function andarMarketing(g) {
+  // Painel ripado de madeira na parede esquerda
+  for (let i = 0; i < 26; i++) bloco(g, 0.06, 2.6, 0.22, i % 2 ? '#a77b52' : '#b5875c', -SALA.x + 0.04, 1.3, -6.6 + i * 0.25);
+
+  // Quadro branco com o fluxo da equipe
+  const fluxo = quadro(g, 3.2, 1.6, -SALA.x + 0.12, 2.2, 1.6, Math.PI / 2, '#b8bcc4');
+
+  // Estante
   const estante = new THREE.Group();
   bloco(estante, 0.5, 2.2, 1.8, '#7a5536', 0, 1.1, 0);
   const coresLivros = ['#c0392b', '#2980b9', '#27ae60', '#f39c12', '#8e44ad', '#34495e'];
@@ -220,59 +237,51 @@ export function criarEscritorio(cena, equipe) {
     }
   }
   estante.position.set(-SALA.x + 0.3, 0, -3.4);
-  mundo.add(estante);
+  g.add(estante);
 
   // Copa: bancada, cafeteira, geladeira, bebedouro
-  bloco(mundo, 2.8, 0.9, 0.7, '#f4f4f2', 8.2, 0.45, -SALA.z + 0.4);
-  bloco(mundo, 2.8, 0.06, 0.74, '#3a3a3d', 8.2, 0.93, -SALA.z + 0.4);
-  bloco(mundo, 0.4, 0.5, 0.35, '#27272a', 7.4, 1.21, -SALA.z + 0.35);
-  bloco(mundo, 0.14, 0.12, 0.14, '#f4f1ea', 7.4, 1.02, -SALA.z + 0.5);
-  bloco(mundo, 0.5, 0.25, 0.35, '#c4c4c4', 8.6, 1.08, -SALA.z + 0.35);
-  bloco(mundo, 0.9, 2.1, 0.8, '#d8dde3', 9.45, 1.05, -SALA.z + 1.6);
-  bloco(mundo, 0.04, 0.5, 0.04, '#9aa0a6', 9.0, 1.4, -SALA.z + 1.4);
+  bloco(g, 2.8, 0.9, 0.7, '#f4f4f2', 8.2, 0.45, -SALA.z + 0.4);
+  bloco(g, 2.8, 0.06, 0.74, '#3a3a3d', 8.2, 0.93, -SALA.z + 0.4);
+  bloco(g, 0.4, 0.5, 0.35, '#27272a', 7.4, 1.21, -SALA.z + 0.35);
+  bloco(g, 0.14, 0.12, 0.14, '#f4f1ea', 7.4, 1.02, -SALA.z + 0.5);
+  bloco(g, 0.5, 0.25, 0.35, '#c4c4c4', 8.6, 1.08, -SALA.z + 0.35);
+  bloco(g, 0.9, 2.1, 0.8, '#d8dde3', 9.45, 1.05, -SALA.z + 1.6);
+  bloco(g, 0.04, 0.5, 0.04, '#9aa0a6', 9.0, 1.4, -SALA.z + 1.4);
   const bebedouro = new THREE.Group();
   bloco(bebedouro, 0.45, 1.0, 0.45, '#e8eef3', 0, 0.5, 0);
   const galao = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.5, 10), mat('#7cc4ff', { transparent: true, opacity: 0.75 }));
   galao.position.y = 1.25;
   bebedouro.add(galao);
   bebedouro.position.set(-7.6, 0, -SALA.z + 0.5);
-  mundo.add(bebedouro);
+  g.add(bebedouro);
 
   // Área de descanso: tapete, sofá, mesinha
-  bloco(mundo, 4, 0.02, 3.6, COR.marinho, -7.6, 0.01, 4.6, { sombra: false });
-  bloco(mundo, 0.5, 0.025, 0.5, COR.laranja, -6.0, 0.012, 6.0, { sombra: false });
+  bloco(g, 4, 0.02, 3.6, COR.marinho, -7.6, 0.01, 4.6, { sombra: false });
+  bloco(g, 0.5, 0.025, 0.5, COR.laranja, -6.0, 0.012, 6.0, { sombra: false });
   const sofa = mat('#4b5563');
-  bloco(mundo, 1, 0.45, 3, sofa, -9.3, 0.3, 4.6);
-  bloco(mundo, 0.3, 0.9, 3, sofa, -9.75, 0.6, 4.6);
-  bloco(mundo, 1, 0.65, 0.3, sofa, -9.3, 0.4, 3.0);
-  bloco(mundo, 1, 0.65, 0.3, sofa, -9.3, 0.4, 6.2);
-  bloco(mundo, 0.75, 0.15, 0.7, '#6b7280', -9.25, 0.58, 4.0);
-  bloco(mundo, 0.75, 0.15, 0.7, '#6b7280', -9.25, 0.58, 5.2);
-  bloco(mundo, 1, 0.08, 1.4, '#8b6b4a', -7.0, 0.45, 4.6);
-  bloco(mundo, 0.08, 0.42, 0.08, '#5a4532', -7.0, 0.21, 4.6);
-  bloco(mundo, 0.3, 0.04, 0.22, '#e11d48', -6.9, 0.51, 4.3);
+  bloco(g, 1, 0.45, 3, sofa, -9.3, 0.3, 4.6);
+  bloco(g, 0.3, 0.9, 3, sofa, -9.75, 0.6, 4.6);
+  bloco(g, 1, 0.65, 0.3, sofa, -9.3, 0.4, 3.0);
+  bloco(g, 1, 0.65, 0.3, sofa, -9.3, 0.4, 6.2);
+  bloco(g, 0.75, 0.15, 0.7, '#6b7280', -9.25, 0.58, 4.0);
+  bloco(g, 0.75, 0.15, 0.7, '#6b7280', -9.25, 0.58, 5.2);
+  bloco(g, 1, 0.08, 1.4, '#8b6b4a', -7.0, 0.45, 4.6);
+  bloco(g, 0.08, 0.42, 0.08, '#5a4532', -7.0, 0.21, 4.6);
+  bloco(g, 0.3, 0.04, 0.22, '#e11d48', -6.9, 0.51, 4.3);
 
   // Mesa de reunião redonda
   const tampo = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.06, 20), mat('#f2efe9'));
   tampo.position.set(5.5, 0.78, 4.4);
   tampo.castShadow = tampo.receiveShadow = true;
-  mundo.add(tampo);
-  bloco(mundo, 0.1, 0.75, 0.1, '#3a3a3a', 5.5, 0.38, 4.4);
-  bloco(mundo, 0.5, 0.06, 0.36, '#fafafa', 5.3, 0.82, 4.3);
+  g.add(tampo);
+  bloco(g, 0.1, 0.75, 0.1, '#3a3a3a', 5.5, 0.38, 4.4);
+  bloco(g, 0.5, 0.06, 0.36, '#fafafa', 5.3, 0.82, 4.3);
 
-  // Plantas
-  planta(mundo, -9.3, -6.3, 1.2);
-  planta(mundo, 9.3, 6.3, 1.3);
-  planta(mundo, -9.4, -1.2, 0.9);
-  planta(mundo, 0.3, -6.3, 0.8);
-  planta(mundo, 9.4, 1.5, 1.0);
-
-  // Mesas de trabalho (uma por funcionário, na ordem do quadro)
-  const mesas = equipe.map((membro, i) => {
-    const mesa = mesaDeTrabalho(mundo, POSICOES_MESA[i] ?? i * 5 - 5, membro.cor);
-    if (membro.vaga) placaVaga(mesa);
-    return mesa;
-  });
+  planta(g, -9.3, -6.3, 1.2);
+  planta(g, 9.3, 6.3, 1.3);
+  planta(g, -9.4, -1.2, 0.9);
+  planta(g, 0.3, -6.3, 0.8);
+  planta(g, 9.4, 1.5, 1.0);
 
   // Pontos onde quem está à toa pode ir (fora das faixas das mesas, para o caminho não atravessar móveis)
   const pontos = [
@@ -289,5 +298,192 @@ export function criarEscritorio(cena, equipe) {
     { nome: 'reuniao2', x: 6.6, z: 4.4, rot: -Math.PI / 2, pose: 'em-pe' },
   ];
 
-  return { mesas, tv, relogio, fluxo, vidros, pontos };
+  return { fluxo, pontos, animacoes: [] };
+}
+
+// ---------- 02 · Impressão 3D ----------
+
+// Impressora 3D com cabeçote andando e a peça crescendo camada por camada
+function impressora(pai, x, z, fase, cores) {
+  const g = new THREE.Group();
+  g.position.set(x, 0.96, z);
+  const metal = mat('#2b2d33');
+  bloco(g, 0.95, 0.1, 0.8, metal, 0, 0.05, 0);
+  for (const [px, pz] of [[-0.43, -0.35], [0.43, -0.35], [-0.43, 0.35], [0.43, 0.35]]) bloco(g, 0.06, 1.05, 0.06, metal, px, 0.58, pz);
+  bloco(g, 0.95, 0.06, 0.8, metal, 0, 1.1, 0);
+  bloco(g, 0.7, 0.03, 0.6, '#9aa3ad', 0, 0.16, 0);
+  bloco(g, 0.12, 0.3, 0.06, COR.laranja, 0.3, 0.3, 0.38); // painel do lado da frente
+
+  const portico = new THREE.Group();
+  bloco(portico, 0.9, 0.05, 0.05, '#4b5563', 0, 0, 0);
+  const cabecote = bloco(portico, 0.14, 0.14, 0.14, '#e5e7eb', 0, -0.08, 0);
+  bloco(cabecote, 0.04, 0.06, 0.04, COR.laranja, 0, -0.09, 0);
+  g.add(portico);
+
+  const peca = new THREE.Mesh(new THREE.BoxGeometry(0.32, 1, 0.32), mat(cores[0], { roughness: 0.5 }));
+  peca.castShadow = true;
+  g.add(peca);
+  pai.add(g);
+
+  let ciclo = -1;
+  return (t) => {
+    const total = t * 0.04 + fase;
+    const p = total % 1;
+    const n = Math.floor(total);
+    if (n !== ciclo) {
+      ciclo = n;
+      peca.material.color.set(cores[n % cores.length]);
+    }
+    const altura = Math.max(0.005, p * 0.5);
+    peca.scale.y = altura;
+    peca.position.y = 0.175 + altura / 2;
+    portico.position.y = 0.175 + altura + 0.17;
+    cabecote.position.x = Math.sin(t * 4 + fase * 10) * 0.12;
+    cabecote.position.z = Math.cos(t * 3.1 + fase * 7) * 0.12;
+  };
+}
+
+// A logo da LUMO WEB 3D "impressa" em blocos, girando num pedestal do showroom
+function logoImpresso(pai, x, z) {
+  const forma = ['NNNN.O', 'N....N', 'N...NN', 'N..NNN', 'N.NNNN', 'NNNNNN'];
+  const peca = new THREE.Group();
+  const lado = 0.2;
+  forma.forEach((linha, r) =>
+    [...linha].forEach((c, col) => {
+      if (c === '.') return;
+      bloco(peca, lado, lado, lado, c === 'O' ? COR.laranja : COR.marinho, (col - 2.5) * lado, (5 - r) * lado, 0);
+    }),
+  );
+  const pedestal = new THREE.Group();
+  pedestal.position.set(x, 0, z);
+  bloco(pedestal, 0.8, 0.9, 0.8, COR.branco, 0, 0.45, 0);
+  bloco(pedestal, 0.86, 0.06, 0.86, COR.marinho, 0, 0.93, 0);
+  peca.position.y = 1.05;
+  pedestal.add(peca);
+  pai.add(pedestal);
+  return (t) => {
+    peca.rotation.y = t * 0.6;
+  };
+}
+
+function andarImpressao3D(g) {
+  // Parede esquerda em azul-marinho, como vitrine
+  bloco(g, 0.06, 2.6, 13.6, COR.marinho, -SALA.x + 0.04, 1.3, -0.2);
+
+  const coresPecas = [COR.laranja, COR.marinho, '#f4f1ea', '#e11d48', '#22c55e', '#3b82f6', '#a855f7'];
+
+  // Bancada com 3 impressoras imprimindo
+  bloco(g, 5.8, 0.9, 0.85, '#d6d0c6', 6.6, 0.45, -SALA.z + 0.5);
+  bloco(g, 5.8, 0.06, 0.9, '#3a3a3d', 6.6, 0.93, -SALA.z + 0.5);
+  const animacoes = [
+    impressora(g, 4.6, -SALA.z + 0.5, 0.1, [COR.laranja, '#f4f1ea', '#3b82f6']),
+    impressora(g, 6.6, -SALA.z + 0.5, 0.45, [COR.marinho, '#22c55e', COR.laranja]),
+    impressora(g, 8.6, -SALA.z + 0.5, 0.75, ['#e11d48', COR.laranja, '#a855f7']),
+  ];
+
+  // Vitrine aberta de peças impressas (fundo, laterais e prateleiras)
+  const vitrine = new THREE.Group();
+  bloco(vitrine, 0.06, 2.2, 1.8, COR.branco, -0.22, 1.1, 0);
+  bloco(vitrine, 0.5, 2.2, 0.06, COR.branco, 0, 1.1, -0.9);
+  bloco(vitrine, 0.5, 2.2, 0.06, COR.branco, 0, 1.1, 0.9);
+  bloco(vitrine, 0.5, 0.06, 1.86, COR.branco, 0, 2.2, 0);
+  for (let prat = 0; prat < 4; prat++) {
+    bloco(vitrine, 0.5, 0.05, 1.76, '#cfd6de', 0, 0.25 + prat * 0.52, 0);
+    for (let i = 0; i < 4; i++) {
+      const cor = coresPecas[(i + prat * 2) % coresPecas.length];
+      const zz = -0.6 + i * 0.4;
+      const yBase = 0.28 + prat * 0.52;
+      if ((i + prat) % 3 === 0) {
+        const vaso = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.11, 0.3, 8), mat(cor, { roughness: 0.5 }));
+        vaso.position.set(0.02, yBase + 0.15, zz);
+        vitrine.add(vaso);
+      } else if ((i + prat) % 3 === 1) {
+        bloco(vitrine, 0.2, 0.2, 0.2, cor, 0.02, yBase + 0.1, zz);
+      } else {
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.28, 6), mat(cor, { roughness: 0.5 }));
+        cone.position.set(0.02, yBase + 0.14, zz);
+        vitrine.add(cone);
+      }
+    }
+  }
+  vitrine.position.set(-SALA.x + 0.3, 0, -3.4);
+  g.add(vitrine);
+
+  // Rack de filamentos (carretéis coloridos)
+  const rack = new THREE.Group();
+  bloco(rack, 0.12, 1.7, 2.8, '#cfd6de', 0, 0.85, 0);
+  const coresFilamento = [COR.laranja, COR.marinho, '#f4f1ea', '#111827', '#e11d48', '#22c55e', '#3b82f6', '#a855f7', '#facc15', '#9ca3af'];
+  for (let linha = 0; linha < 3; linha++) {
+    bloco(rack, 0.36, 0.04, 2.7, '#9aa3ad', 0.18, 0.3 + linha * 0.5, 0);
+    for (let i = 0; i < 5; i++) {
+      const carretel = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.14, 14), mat(coresFilamento[(linha * 5 + i) % coresFilamento.length], { roughness: 0.6 }));
+      carretel.rotation.x = Math.PI / 2;
+      carretel.position.set(0.2, 0.52 + linha * 0.5, -1.1 + i * 0.55);
+      carretel.castShadow = true;
+      rack.add(carretel);
+    }
+  }
+  rack.position.set(-SALA.x + 0.1, 0.5, 1.6);
+  g.add(rack);
+
+  // Mesa de atendimento ao cliente com amostras
+  const tampo = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.06, 20), mat('#f2efe9'));
+  tampo.position.set(-7.6, 0.78, 4.6);
+  tampo.castShadow = tampo.receiveShadow = true;
+  g.add(tampo);
+  bloco(g, 0.1, 0.75, 0.1, '#3a3a3a', -7.6, 0.38, 4.6);
+  bloco(g, 0.18, 0.18, 0.18, COR.laranja, -7.8, 0.9, 4.5);
+  bloco(g, 0.12, 0.26, 0.12, '#3b82f6', -7.4, 0.94, 4.8);
+  cadeira(g, -8.7, 4.6, '#6b7280').rotation.y = Math.PI / 2 - Math.PI;
+  bloco(g, 4, 0.02, 3.6, '#e7e2d8', -7.6, 0.01, 4.6, { sombra: false });
+
+  // Balcão de atendimento perto da entrada
+  bloco(g, 3, 1.05, 0.6, COR.marinho, -1.5, 0.52, 5.5);
+  bloco(g, 3.1, 0.06, 0.7, COR.branco, -1.5, 1.07, 5.5);
+  bloco(g, 0.6, 0.6, 0.02, COR.laranja, -1.5, 0.55, 5.81);
+
+  animacoes.push(logoImpresso(g, 5.5, 4.4));
+
+  planta(g, 9.3, 6.3, 1.3);
+  planta(g, -9.3, -6.3, 1.2);
+  planta(g, 0.3, -6.3, 0.8);
+  planta(g, 9.4, 1.5, 1.0);
+
+  const pontos = [
+    { nome: 'impressora1', x: 4.6, z: -5.6, rot: Math.PI, pose: 'em-pe' },
+    { nome: 'impressora2', x: 7.6, z: -5.6, rot: Math.PI, pose: 'em-pe' },
+    { nome: 'janela', x: 2.5, z: -5.9, rot: Math.PI, pose: 'em-pe' },
+    { nome: 'vitrine', x: -8.7, z: -3.4, rot: -Math.PI / 2, pose: 'em-pe' },
+    { nome: 'filamentos', x: -8.6, z: 1.6, rot: -Math.PI / 2, pose: 'em-pe' },
+    { nome: 'cliente', x: -6.6, z: 4.6, rot: -Math.PI / 2, pose: 'em-pe' },
+    { nome: 'balcao', x: -1.5, z: 4.7, rot: 0, pose: 'em-pe' },
+    { nome: 'pedestal1', x: 4.7, z: 4.4, rot: Math.PI / 2, pose: 'em-pe' },
+    { nome: 'pedestal2', x: 6.3, z: 4.4, rot: -Math.PI / 2, pose: 'em-pe' },
+  ];
+
+  return { pontos, animacoes };
+}
+
+const DECORACAO = { 1: andarMarketing, 2: andarImpressao3D };
+const JANELAS = { 1: [-7.4, 2.5, 7.6], 2: [-7.4, 2.5] };
+
+/**
+ * Monta o prédio: um grupo por andar, empilhados. Cada andar tem mesas para a sua equipe,
+ * pontos de passeio (com nome prefixado pelo andar) e animações próprias.
+ */
+export function criarPredio(cena, andares, equipe) {
+  const predio = new Map();
+  for (const andar of andares) {
+    const g = new THREE.Group();
+    g.position.y = (andar.numero - 1) * ALTURA_ANDAR;
+    cena.add(g);
+
+    const base = estrutura(g, andar, JANELAS[andar.numero] ?? [-7.4, 2.5, 7.6]);
+    const extra = (DECORACAO[andar.numero] ?? (() => ({ pontos: [], animacoes: [] })))(g);
+    const mesas = mesasDoAndar(g, equipe.filter((m) => m.andar === andar.numero));
+    const pontos = extra.pontos.map((p) => ({ ...p, nome: `a${andar.numero}-${p.nome}` }));
+
+    predio.set(andar.numero, { ...andar, grupo: g, ...base, ...extra, pontos, mesas });
+  }
+  return predio;
 }

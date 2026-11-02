@@ -279,3 +279,34 @@ export function desenharFluxo(tela, agentes) {
   ctx.fillText('Maps  →  site sob medida  →  vídeo + abordagem', 28, 280);
   textura.needsUpdate = true;
 }
+
+// TV do andar de Impressão 3D: ainda sem dados de pedidos, mostra a montagem da equipe comercial
+export function desenharTV3D(tela, agentes) {
+  const { ctx, canvas, textura } = tela;
+  const { width: w, height: h } = canvas;
+  fundo(ctx, w, h, COR.marinho);
+  ctx.fillStyle = COR.laranja;
+  ctx.fillRect(26, 26, 14, 14);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = COR.branco;
+  ctx.font = `700 20px ${FONTE_TITULO}`;
+  ctx.fillText('LUMO 3D · COMERCIAL', 50, 40);
+
+  const contratados = agentes.filter((a) => !a.vaga).length;
+  ctx.font = `800 72px ${FONTE_TITULO}`;
+  ctx.fillStyle = COR.laranja;
+  ctx.fillText(`${contratados}/${agentes.length}`, 26, 132);
+  ctx.fillStyle = 'rgba(254,253,249,.7)';
+  ctx.font = `500 20px ${FONTE_TEXTO}`;
+  ctx.fillText('vagas preenchidas', 26, 164);
+
+  agentes.forEach((a, i) => {
+    const y = 204 + i * 28;
+    ctx.fillStyle = a.cor;
+    ctx.fillRect(26, y - 13, 12, 12);
+    ctx.fillStyle = a.vaga ? 'rgba(254,253,249,.55)' : COR.branco;
+    ctx.font = `500 18px ${FONTE_TEXTO}`;
+    ctx.fillText(`${a.cargo}${a.vaga ? ' · em contratação' : ` · ${a.nome}`}`, 48, y);
+  });
+  textura.needsUpdate = true;
+}

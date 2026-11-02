@@ -4,7 +4,8 @@ import { Personagem } from './personagem.js';
 import { CORREDOR_Z } from './mundo.js';
 
 const VELOCIDADE = 1.7;
-const PORTA = { x: 8.0, z: 6.8 };
+// Entrada pela frente-direita; o sorteio de x fica à direita da mesa de reunião e do pedestal
+const PORTA = { x: 8.4, z: 6.8 };
 const ocupados = new Set();
 
 const ROTULO_ESTADO = {
@@ -23,7 +24,8 @@ function anguloSuave(atual, alvo, k) {
 }
 
 export class Funcionario {
-  constructor(membro, mesa, cena, pontos, aoClicar) {
+  // `andar` é o grupo 3D do andar: o bonequinho anda em coordenadas locais dele
+  constructor(membro, mesa, andar, pontos, aoClicar) {
     this.membro = membro;
     this.mesa = mesa;
     this.pontos = pontos;
@@ -45,7 +47,7 @@ export class Funcionario {
     this.boneco.raiz.visible = false;
     this.boneco.raiz.position.set(PORTA.x, 0, PORTA.z);
     this.boneco.raiz.traverse((o) => (o.userData.funcionario = this));
-    cena.add(this.boneco.raiz);
+    andar.add(this.boneco.raiz);
     this.presente = false;
     this.mesa.grupo.add(this.etiqueta);
     this.etiqueta.position.set(0, 2.3, 1.05);
@@ -130,7 +132,7 @@ export class Funcionario {
       // Cada um entra por um ponto um pouco diferente, para ninguém andar "dentro" do outro
       this.presente = true;
       this.boneco.raiz.visible = true;
-      this.boneco.raiz.position.set(PORTA.x - Math.random() * 3, 0, PORTA.z);
+      this.boneco.raiz.position.set(PORTA.x - Math.random(), 0, PORTA.z);
       this.saida = null;
       this.boneco.raiz.add(this.etiqueta);
       this.etiqueta.position.set(0, 2.3, 0);

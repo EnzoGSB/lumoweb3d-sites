@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
-import { criarEscritorio } from './mundo.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { criarPredio, ALTURA_ANDAR, SALA } from './mundo.js';
 import { Funcionario, ROTULOS } from './funcionario.js';
-import { desenharMonitor, desenharTV, desenharRelogio, desenharFluxo } from './telas.js';
+import { desenharMonitor, desenharTV, desenharTV3D, desenharRelogio, desenharFluxo } from './telas.js';
 
 const $ = (s) => document.querySelector(s);
 const palco = $('#palco');
@@ -25,13 +25,13 @@ const cena = new THREE.Scene();
 cena.background = new THREE.Color('#14273C'); // azul-marinho da marca
 
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
-camera.position.set(22, 20, 22);
+camera.position.set(22, 20.5, 22);
 camera.zoom = 1.08;
 
 const controles = new OrbitControls(camera, rotulos.domElement);
 controles.target.set(0, 0.5, 0);
 controles.enableDamping = true;
-controles.minZoom = 0.7;
+controles.minZoom = 0.45;
 controles.maxZoom = 3;
 controles.minPolarAngle = 0.55;
 controles.maxPolarAngle = 1.2;
@@ -42,10 +42,10 @@ controles.screenSpacePanning = true;
 const ceu = new THREE.HemisphereLight('#ffffff', '#8a7560', 1.6);
 cena.add(ceu);
 const sol = new THREE.DirectionalLight('#fff4e0', 2.2);
-sol.position.set(10, 22, 12);
+sol.position.set(10, 26, 12);
 sol.castShadow = true;
 sol.shadow.mapSize.set(2048, 2048);
-Object.assign(sol.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 60 });
+Object.assign(sol.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, near: 1, far: 70 });
 sol.shadow.bias = -0.0005;
 cena.add(sol);
 
@@ -67,8 +67,9 @@ ajustarTamanho();
 
 // ---------- Dados ----------
 let estado = null;
-let mundo = null;
+let predio = null; // Map<numero do andar, andar>
 const funcionarios = new Map();
+const placasAndar = new Map();
 
 // No seu PC lê a API ao vivo; na versão pública (GitHub Pages) lê a foto dos dados enviada pelo publicador
 const PUBLICO = !['localhost', '127.0.0.1'].includes(location.hostname);
@@ -86,25 +87,136 @@ async function buscarEstado() {
   }
 }
 
-function montarMundo(agentes) {
-  mundo = criarEscritorio(cena, agentes);
-  agentes.forEach((a, i) => {
-    funcionarios.set(a.id, new Funcionario(a, mundo.mesas[i], cena, mundo.pontos, abrirDetalhe));
-  });
+const doAndar = (n) => estado.agentes.filter((a) => a.andar === n);
+const numero = (n) => String(n).padStart(2, '0');
+
+function montarPredio() {
+  predio = criarPredio(cena, estado.andares, estado.agentes);
+  for (const a of estado.agentes) {
+    const andar = predio.get(a.andar);
+    funcionarios.set(a.id, new Funcionario(a, andar.mesas.get(a.id), andar.grupo, andar.pontos, abrirDetalhe));
+  }
+
+  // Placas dos andares (aparecem na vista do prédio)
+  for (const andar of predio.values()) {
+    const el = document.createElement('button');
+    el.className = 'placa-andar';
+    el.addEventListener('click', () => mudarVista(andar.numero));
+    const placa = new CSS2DObject(el);
+    placa.position.set(SALA.x - 1.5, 1.2, SALA.z);
+    andar.grupo.add(placa);
+    placasAndar.set(andar.numero, placa);
+  }
+
+  $('#andares').innerHTML = [
+    `<button data-vista="predio">Prédio<small>Todos os andares</small></button>`,
+    ...estado.andares.map((a) => `<button data-vista="${a.numero}"><b>${numero(a.numero)}</b>${esc(a.nome)}<small>${esc(a.placa)}</small></button>`),
+  ].join('');
+  mudarVista(vistaSalva(), false);
 }
 
 function aplicarEstado() {
-  if (!mundo) montarMundo(estado.agentes);
+  if (!predio) montarPredio();
   for (const a of estado.agentes) funcionarios.get(a.id)?.atualizarStatus(a);
-  desenharTV(mundo.tv, estado);
-  desenharFluxo(mundo.fluxo, estado.agentes);
+
+  const marketing = predio.get(1);
+  if (marketing) {
+    desenharTV(marketing.tv, estado);
+    desenharFluxo(marketing.fluxo, doAndar(1));
+  }
+  const impressao = predio.get(2);
+  if (impressao) desenharTV3D(impressao.tv, doAndar(2));
+
+  for (const [n, placa] of placasAndar) {
+    const equipe = doAndar(n);
+    const ativos = equipe.filter((a) => a.estado === 'trabalhando').length;
+    const contratados = equipe.filter((a) => !a.vaga).length;
+    const andar = predio.get(n);
+    placa.element.innerHTML = `<b>${numero(n)}</b><span>${esc(andar.nome)}<small>${
+      contratados ? `${ativos} trabalhando · ${contratados}/${equipe.length} na equipe` : `${equipe.length} vagas abertas`
+    }</small></span>`;
+  }
+
   atualizarHud();
   if (detalheAberto) abrirDetalhe(funcionarios.get(detalheAberto));
 }
 
+// ---------- Vistas: prédio inteiro ou um andar ----------
+let vista = 1;
+let alvoCamera = null;
+
+function vistaSalva() {
+  try {
+    const v = localStorage.getItem('escritorio-vista');
+    if (v === 'predio') return 'predio';
+    if (predio.has(Number(v))) return Number(v);
+  } catch {}
+  return 1;
+}
+
+function andarVisivel(n) {
+  return vista === 'predio' || vista === n;
+}
+
+function mudarVista(nova, animar = true) {
+  vista = nova;
+  try {
+    localStorage.setItem('escritorio-vista', String(nova));
+  } catch {}
+
+  for (const andar of predio.values()) andar.grupo.visible = andarVisivel(andar.numero);
+  // Na vista do prédio os andares se sobrepõem: troca os crachás pelas placas de cada andar
+  for (const f of funcionarios.values()) f.etiqueta.visible = vista !== 'predio' && andarVisivel(f.membro.andar);
+  for (const placa of placasAndar.values()) placa.visible = vista === 'predio';
+
+  const topo = (predio.size - 1) * ALTURA_ANDAR;
+  alvoCamera =
+    vista === 'predio'
+      ? { y: topo / 2 + 1.5, zoom: 0.62 }
+      : { y: (vista - 1) * ALTURA_ANDAR + 0.5, zoom: 1.08 };
+  if (!animar) {
+    moverCamera(1);
+    alvoCamera = null;
+  }
+
+  document.querySelectorAll('#andares button').forEach((b) => b.classList.toggle('ativo', b.dataset.vista === String(vista)));
+  document.body.dataset.vista = String(vista);
+  if (estado) atualizarHud();
+}
+
+// Desliza alvo e câmera juntos (mantendo o ângulo que a pessoa escolheu) e ajusta o zoom
+function moverCamera(k) {
+  const dy = (alvoCamera.y - controles.target.y) * k;
+  controles.target.y += dy;
+  camera.position.y += dy;
+  // Recentraliza no eixo horizontal só ao trocar de vista
+  const dx = -controles.target.x * k;
+  const dz = -controles.target.z * k;
+  controles.target.x += dx;
+  controles.target.z += dz;
+  camera.position.x += dx;
+  camera.position.z += dz;
+  camera.zoom += (alvoCamera.zoom - camera.zoom) * k;
+  camera.updateProjectionMatrix();
+}
+
+$('#andares').addEventListener('click', (e) => {
+  const v = e.target.closest('button')?.dataset.vista;
+  if (v) mudarVista(v === 'predio' ? 'predio' : Number(v));
+});
+
 // ---------- Interface ----------
 const fmtHora = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+function cartaoMembro(a) {
+  return `
+      <li><button class="membro" data-id="${a.id}" data-estado="${a.estado}" style="--cor:${a.cor}">
+        <span class="avatar">${esc((a.nome ?? '?')[0])}</span>
+        <span class="info"><b>${esc(a.nome ?? 'Vaga aberta')}</b><small>${esc(a.cargo)} · <code>${esc(a.pasta)}</code></small></span>
+        <span class="selo">${ROTULOS[a.estado] ?? a.estado}</span>
+      </button></li>`;
+}
 
 function atualizarHud() {
   const ativos = estado.agentes.filter((a) => a.estado === 'trabalhando').length;
@@ -114,14 +226,15 @@ function atualizarHud() {
   $('#m-fila').textContent = estado.leads.naFila;
   $('#m-ativos').textContent = `${ativos}/${contratados}`;
 
-  $('#equipe').innerHTML = estado.agentes
+  // Equipe agrupada por andar; o andar em foco vem primeiro
+  const ordem = [...estado.andares].sort((a, b) => (b.numero === vista) - (a.numero === vista));
+  $('#equipe').innerHTML = ordem
     .map(
-      (a) => `
-      <li><button class="membro" data-id="${a.id}" data-estado="${a.estado}" style="--cor:${a.cor}">
-        <span class="avatar">${esc((a.nome ?? '?')[0])}</span>
-        <span class="info"><b>${esc(a.nome ?? 'Vaga aberta')}</b><small>${esc(a.cargo)} · <code>${esc(a.pasta)}</code></small></span>
-        <span class="selo">${ROTULOS[a.estado] ?? a.estado}</span>
-      </button></li>`,
+      (andar) => `
+      <li class="grupo-andar${andarVisivel(andar.numero) ? '' : ' fora'}">
+        <button data-vista="${andar.numero}"><b>${numero(andar.numero)}</b> ${esc(andar.nome)}</button>
+        <ul>${doAndar(andar.numero).map(cartaoMembro).join('')}</ul>
+      </li>`,
     )
     .join('');
 
@@ -146,8 +259,13 @@ function atualizarHud() {
 }
 
 $('#equipe').addEventListener('click', (e) => {
+  const andar = e.target.closest('.grupo-andar > button')?.dataset.vista;
+  if (andar) return mudarVista(Number(andar));
   const id = e.target.closest('.membro')?.dataset.id;
-  if (id) abrirDetalhe(funcionarios.get(id));
+  if (!id) return;
+  const f = funcionarios.get(id);
+  if (!andarVisivel(f.membro.andar) || vista === 'predio') mudarVista(f.membro.andar);
+  abrirDetalhe(f);
 });
 
 let detalheAberto = null;
@@ -155,6 +273,7 @@ function abrirDetalhe(f) {
   if (!f) return;
   detalheAberto = f.membro.id;
   const a = estado.agentes.find((x) => x.id === f.membro.id);
+  const andar = estado.andares.find((x) => x.numero === a.andar);
   const s = a.status ?? {};
   const linha = (rotulo, valor) => (valor != null && valor !== '' ? `<dt>${rotulo}</dt><dd>${valor}</dd>` : '');
   $('#detalhe').style.setProperty('--cor', a.cor);
@@ -165,6 +284,7 @@ function abrirDetalhe(f) {
     </header>
     <p class="descricao">${esc(a.descricao)}</p>
     <dl>
+      ${linha('Andar', andar ? `${numero(andar.numero)} · ${esc(andar.nome)}` : null)}
       ${linha('Pasta', `<code>${esc(a.pasta)}</code>`)}
       ${linha('Situação', ROTULOS[a.estado] ?? a.estado)}
       ${linha('Fazendo agora', a.estado === 'trabalhando' || a.estado === 'erro' ? esc(s.tarefa) : null)}
@@ -187,26 +307,30 @@ $('#detalhe .fechar').addEventListener('click', () => {
   detalheAberto = null;
 });
 
-// Clique direto no bonequinho
+// Clique direto no bonequinho (só nos andares à mostra)
 const raio = new THREE.Raycaster();
 rotulos.domElement.addEventListener('click', (e) => {
+  if (vista === 'predio') return;
   const r = rotulos.domElement.getBoundingClientRect();
   raio.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
-  const alvo = raio.intersectObjects(cena.children, true).find((i) => i.object.userData.funcionario);
+  const alvo = raio
+    .intersectObjects(cena.children, true)
+    .find((i) => i.object.userData.funcionario && andarVisivel(i.object.userData.funcionario.membro.andar));
   if (alvo) abrirDetalhe(alvo.object.userData.funcionario);
 });
 
 // ---------- Luz do dia (segue o horário real) ----------
 function atualizarLuz() {
-  if (!mundo) return;
   const h = new Date().getHours() + new Date().getMinutes() / 60;
   const dia = Math.min(1, Math.max(0, Math.min(h - 6, 19 - h) / 1.5)); // 0 = noite, 1 = dia
   ceu.intensity = 0.7 + dia * 0.9;
   sol.intensity = 0.6 + dia * 1.6;
   sol.color.set(dia > 0.5 ? '#fff4e0' : '#ffd9a8');
-  for (const vidro of mundo.vidros) {
-    vidro.color.set(dia > 0.5 ? '#9fd3ff' : '#1e2a4a');
-    vidro.emissive.set(dia > 0.5 ? '#7fbfff' : '#0f1830');
+  for (const andar of predio.values()) {
+    for (const vidro of andar.vidros) {
+      vidro.color.set(dia > 0.5 ? '#9fd3ff' : '#1e2a4a');
+      vidro.emissive.set(dia > 0.5 ? '#7fbfff' : '#0f1830');
+    }
   }
   $('#relogio').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
@@ -218,23 +342,33 @@ let acumRelogio = 1;
 function quadro() {
   const dt = Math.min(relogioCena.getDelta(), 0.1);
   const t = relogioCena.elapsedTime;
+
+  if (alvoCamera) {
+    moverCamera(Math.min(1, dt * 6));
+    if (Math.abs(alvoCamera.y - controles.target.y) < 0.01 && Math.abs(alvoCamera.zoom - camera.zoom) < 0.005) alvoCamera = null;
+  }
   controles.update();
 
-  if (mundo && estado) {
+  if (predio && estado) {
     for (const f of funcionarios.values()) f.atualizar(dt);
+    for (const andar of predio.values()) {
+      if (andar.grupo.visible) for (const animar of andar.animacoes) animar(t);
+    }
 
     acumTelas += dt;
     if (acumTelas > 0.12) {
       acumTelas = 0;
-      estado.agentes.forEach((a, i) => {
-        desenharMonitor(mundo.mesas[i].tela, a, t);
-        mundo.mesas[i].brilho.intensity = a.estado === 'trabalhando' ? 1.2 : 0;
-      });
+      for (const a of estado.agentes) {
+        const f = funcionarios.get(a.id);
+        if (!f || !andarVisivel(a.andar)) continue;
+        desenharMonitor(f.mesa.tela, a, t);
+        f.mesa.brilho.intensity = a.estado === 'trabalhando' ? 1.2 : 0;
+      }
     }
     acumRelogio += dt;
     if (acumRelogio > 1) {
       acumRelogio = 0;
-      desenharRelogio(mundo.relogio);
+      for (const andar of predio.values()) desenharRelogio(andar.relogio);
       atualizarLuz();
     }
   }

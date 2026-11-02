@@ -183,3 +183,46 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.92em; color:
   .detalhe { bottom: calc(34vh + 28px); }
   .dica { display: none; }
 }
+
+/* ---------- Andares do prédio ---------- */
+.andares {
+  display: flex; gap: 4px; padding: 4px; margin-right: auto;
+  background: var(--cartao); border: 1px solid var(--borda); border-radius: var(--raio);
+  box-shadow: 0 8px 24px rgba(5, 14, 26, 0.25);
+}
+.andares button {
+  display: grid; grid-template-columns: auto auto; column-gap: 8px; align-items: center; justify-items: start;
+  padding: 6px 12px; border: 0; border-radius: 8px; background: transparent; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--marinho); text-align: left;
+  transition: background 0.2s;
+}
+.andares button b { grid-row: span 2; font: 800 18px var(--titulo); color: var(--suave); }
+.andares button small { grid-column: 2; font-size: 11px; font-weight: 500; color: var(--suave); }
+.andares button:first-child small { grid-column: 1; }
+.andares button:hover { background: #f1efe8; }
+.andares button:focus-visible { outline: 2px solid var(--laranja); outline-offset: 1px; }
+.andares button.ativo { background: var(--marinho); color: var(--branco); }
+.andares button.ativo b { color: var(--laranja); }
+.andares button.ativo small { color: rgba(254, 253, 249, 0.7); }
+
+.grupo-andar { display: grid; gap: 6px; }
+.grupo-andar + .grupo-andar { margin-top: 8px; }
+.grupo-andar > button {
+  justify-self: start; display: flex; gap: 6px; align-items: baseline; padding: 0; border: 0; background: none;
+  font-size: 12px; font-weight: 600; color: var(--suave); cursor: pointer;
+}
+.grupo-andar > button b { font: 800 12px var(--titulo); color: var(--marinho); }
+.grupo-andar > button:hover { color: var(--marinho); }
+.grupo-andar > ul { display: grid; gap: 6px; }
+.grupo-andar.fora > ul { opacity: 0.55; }
+
+.placa-andar {
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 10px; cursor: pointer; text-align: left;
+  background: var(--branco); color: var(--marinho); border: 0; border-left: 4px solid var(--laranja); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(5, 14, 26, 0.4); pointer-events: auto; transition: transform 0.2s;
+}
+.placa-andar:hover { transform: translateY(-2px); }
+.placa-andar > b { font: 800 28px var(--titulo); }
+.placa-andar span { display: grid; font: 700 15px var(--titulo); }
+.placa-andar small { font: 500 12px Inter, sans-serif; color: var(--suave); }
+.grupo-andar, .grupo-andar > ul { grid-template-columns: minmax(0, 1fr); }
