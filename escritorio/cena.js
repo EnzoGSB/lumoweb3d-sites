@@ -348,17 +348,19 @@ function abrirDetalhe(f) {
   const s = a.status ?? {};
   const linha = (rotulo, valor) => (valor != null && valor !== '' ? `<dt>${rotulo}</dt><dd>${valor}</dd>` : '');
   $('#detalhe').style.setProperty('--cor', a.cor);
-  $('#detalhe .conteudo').innerHTML = `
+  const html = `
     <header>
       <span class="avatar">${esc((a.nome ?? '?')[0])}</span>
       <div><h2>${esc(a.nome ?? 'Vaga aberta')}</h2><p>${esc(a.cargo)}</p></div>
     </header>
+    ${blocoProblema(a)}
     <p class="descricao">${esc(a.descricao)}</p>
+    ${blocoLeadsComErro(a)}
     <dl>
       ${linha('Andar', andar ? `${numero(andar.numero)} · ${esc(andar.nome)}` : null)}
       ${linha('Pasta', `<code>${esc(a.pasta)}</code>`)}
       ${linha('Situação', ROTULOS[a.estado] ?? a.estado)}
-      ${linha('Fazendo agora', ['trabalhando', 'plantao', 'erro'].includes(a.estado) ? esc(s.tarefa) : null)}
+      ${linha('Fazendo agora', ['trabalhando', 'plantao'].includes(a.estado) ? esc(s.tarefa) : null)}
       ${linha('Lead atual', esc(s.leadAtual))}
       ${linha('Fila', s.fila)}
       ${linha('Próxima execução', s.proximaExecucao && a.estado === 'plantao' ? fmtHora(s.proximaExecucao) : null)}
@@ -371,11 +373,44 @@ function abrirDetalhe(f) {
             .join('')}</ol>`
         : ''
     }`;
+  // Sem isso, a atualização a cada 2 s fecharia o detalhe técnico e voltaria a rolagem
+  const conteudo = $('#detalhe .conteudo');
+  if (conteudo.dataset.html !== html) {
+    conteudo.innerHTML = html;
+    conteudo.dataset.html = html;
+  }
   $('#detalhe').hidden = false;
+}
+
+function blocoProblema(a) {
+  const p = a.problema;
+  if (!p) return '';
+  const desde = p.desde ? `${new Date(p.desde).toLocaleDateString('pt-BR')} às ${fmtHora(p.desde)}` : null;
+  return `
+    <section class="problema" role="alert">
+      <h4>${esc(p.titulo)}</h4>
+      <dl>
+        <dt>Causa</dt><dd>${esc(p.causa)}</dd>
+        ${p.mensagem ? `<dt>Mensagem</dt><dd><code>${esc(p.mensagem)}</code></dd>` : ''}
+        <dt>Como resolver</dt><dd>${esc(p.acao)}</dd>
+        ${p.lead ? `<dt>Lead</dt><dd>${esc(p.lead)}</dd>` : ''}
+        ${desde ? `<dt>Desde</dt><dd>${desde}</dd>` : ''}
+      </dl>
+      ${p.detalhe ? `<details open><summary>Erro técnico</summary><pre>${esc(p.detalhe)}</pre></details>` : ''}
+    </section>`;
+}
+
+function blocoLeadsComErro(a) {
+  if (!a.leadsComErro?.length) return '';
+  return `
+    <details class="leads-com-erro"><summary>${a.leadsComErro.length} lead(s) com falha</summary>
+      <ul>${a.leadsComErro.map((l) => `<li><b>${esc(l.nome)}</b> (${l.tentativas}/3): ${esc(l.erro)}</li>`).join('')}</ul>
+    </details>`;
 }
 $('#detalhe .fechar').addEventListener('click', () => {
   $('#detalhe').hidden = true;
   detalheAberto = null;
+  delete $('#detalhe .conteudo').dataset.html;
   montarTerminal(null);
 });
 
