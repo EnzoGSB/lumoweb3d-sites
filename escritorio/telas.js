@@ -1,4 +1,5 @@
 // Desenho das telas em canvas: monitores das mesas, TV de métricas, relógio e quadro do fluxo.
+import { COR, FONTE_TITULO, FONTE_TEXTO, logo } from './marca.js';
 
 function fundo(ctx, w, h, cor) {
   ctx.fillStyle = cor;
@@ -112,20 +113,14 @@ function telaGenerica(ctx, w, h, t) {
   }
 }
 
+// Protetor de tela: cartão claro com a logo flutuando sobre o azul-marinho
 function descanso(ctx, w, h, t) {
-  const g = ctx.createLinearGradient(0, 0, w, h);
-  g.addColorStop(0, '#111827');
-  g.addColorStop(1, '#1f2937');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, w, h);
+  fundo(ctx, w, h, COR.marinho);
   const x = w / 2 + Math.sin(t * 0.5) * 70;
-  const y = h / 2 + Math.cos(t * 0.37) * 40;
-  ctx.font = 'bold 22px system-ui';
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#f5f5f5';
-  ctx.fillText('LUMOWEB', x - 14, y);
-  ctx.fillStyle = '#fbbf24';
-  ctx.fillText('3D', x + 52, y);
+  const y = h / 2 + Math.cos(t * 0.37) * 35;
+  ctx.fillStyle = COR.branco;
+  ctx.fillRect(x - 36, y - 36, 72, 72);
+  if (logo.complete && logo.naturalWidth) ctx.drawImage(logo, x - 34, y - 34, 68, 68);
 }
 
 function telaErro(ctx, w, h, t, status) {
@@ -164,39 +159,44 @@ export function desenharMonitor(tela, agente, t) {
 export function desenharTV(tela, estado) {
   const { ctx, canvas, textura } = tela;
   const { width: w, height: h } = canvas;
-  fundo(ctx, w, h, '#0b0f17');
+  fundo(ctx, w, h, COR.marinho);
+  ctx.fillStyle = COR.laranja;
+  ctx.fillRect(26, 26, 14, 14);
   ctx.textAlign = 'left';
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '600 20px system-ui';
-  ctx.fillText('PAINEL DO DIA', 26, 40);
+  ctx.fillStyle = COR.branco;
+  ctx.font = `700 20px ${FONTE_TITULO}`;
+  ctx.fillText('PAINEL DO DIA', 50, 40);
   ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(254,253,249,.65)';
+  ctx.font = `500 18px ${FONTE_TEXTO}`;
   ctx.fillText(new Date().toLocaleDateString('pt-BR'), w - 26, 40);
 
+  // Laranja só no número que importa: sites no ar
   const itens = [
-    ['Leads', estado.leads.total, '#60a5fa'],
-    ['Sites no ar', estado.leads.comSite, '#4ade80'],
-    ['Na fila', estado.leads.naFila, '#fbbf24'],
+    ['Leads', estado.leads.total, COR.branco],
+    ['Sites no ar', estado.leads.comSite, COR.laranja],
+    ['Na fila', estado.leads.naFila, COR.branco],
   ];
   itens.forEach(([rotulo, valor, cor], i) => {
     const x = 26 + i * ((w - 52) / 3);
     ctx.textAlign = 'left';
     ctx.fillStyle = cor;
-    ctx.font = 'bold 76px system-ui';
+    ctx.font = `800 72px ${FONTE_TITULO}`;
     ctx.fillText(String(valor), x, 140);
-    ctx.fillStyle = '#cbd5e1';
-    ctx.font = '22px system-ui';
+    ctx.fillStyle = 'rgba(254,253,249,.7)';
+    ctx.font = `500 20px ${FONTE_TEXTO}`;
     ctx.fillText(rotulo, x, 172);
   });
 
   const total = Math.max(1, estado.leads.total);
-  ctx.fillStyle = '#1e293b';
+  ctx.fillStyle = 'rgba(254,253,249,.12)';
   ctx.fillRect(26, 200, w - 52, 14);
-  ctx.fillStyle = '#4ade80';
+  ctx.fillStyle = COR.laranja;
   ctx.fillRect(26, 200, ((w - 52) * estado.leads.comSite) / total, 14);
 
   const ultimo = estado.sites[0];
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '18px system-ui';
+  ctx.fillStyle = 'rgba(254,253,249,.7)';
+  ctx.font = `500 18px ${FONTE_TEXTO}`;
   ctx.textAlign = 'left';
   ctx.fillText(ultimo ? `Último site: ${ultimo.nome}`.slice(0, 48) : 'Nenhum site publicado ainda', 26, 252);
   textura.needsUpdate = true;
@@ -240,7 +240,7 @@ export function desenharFluxo(tela, agentes) {
   const { ctx, canvas, textura } = tela;
   const { width: w, height: h } = canvas;
   fundo(ctx, w, h, '#fbfbf8');
-  ctx.fillStyle = '#334155';
+  ctx.fillStyle = COR.marinho;
   ctx.font = 'bold 34px "Comic Sans MS", "Segoe Print", cursive';
   ctx.textAlign = 'left';
   ctx.fillText('Fluxo da equipe', 28, 50);
@@ -262,7 +262,7 @@ export function desenharFluxo(tela, agentes) {
     ctx.font = '22px "Comic Sans MS", "Segoe Print", cursive';
     ctx.fillText(a.nome ?? 'contratar!', x + larg / 2, y + 84);
     if (i < agentes.length - 1) {
-      ctx.strokeStyle = '#64748b';
+      ctx.strokeStyle = COR.marinho;
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.moveTo(x + larg + 8, y + 55);

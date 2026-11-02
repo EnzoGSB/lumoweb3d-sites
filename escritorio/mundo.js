@@ -1,5 +1,6 @@
 // Monta o escritório: sala, mobília, mesas de trabalho e as telas (canvas) que mostram o que cada agente faz.
 import * as THREE from 'three';
+import { COR, FONTE_TITULO, logo, marcaPronta } from './marca.js';
 
 // Sala: x ∈ [-10, 10], z ∈ [-7, 7]. Paredes no fundo (z = -7) e na esquerda (x = -10).
 export const SALA = { x: 10, z: 7, alturaParede: 4.2 };
@@ -185,20 +186,23 @@ export function criarEscritorio(cena, equipe) {
   const vidros = [-7.4, 2.5, 7.6].map((x) => janela(mundo, x));
 
   // Letreiro da empresa
-  const letreiro = quadro(mundo, 3.2, 0.7, -2.6, 3.3, -SALA.z + 0.1, 0, '#1d1d1f');
-  letreiro.ctx.fillStyle = '#111114';
-  letreiro.ctx.fillRect(0, 0, letreiro.canvas.width, letreiro.canvas.height);
-  letreiro.ctx.font = 'bold 84px system-ui';
-  letreiro.ctx.textAlign = 'center';
-  letreiro.ctx.textBaseline = 'middle';
-  letreiro.ctx.fillStyle = '#f5f5f5';
-  letreiro.ctx.fillText('LUMOWEB', 280, 72);
-  letreiro.ctx.fillStyle = '#fbbf24';
-  letreiro.ctx.fillText('3D', 530, 72);
-  letreiro.textura.needsUpdate = true;
+  // Placa clara (a logo original só vai sobre fundo claro) com moldura azul-marinho
+  const letreiro = quadro(mundo, 3.6, 0.8, -2.6, 3.3, -SALA.z + 0.1, 0, COR.marinho);
+  marcaPronta.then(() => {
+    const { ctx, canvas, textura } = letreiro;
+    ctx.fillStyle = COR.branco;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(logo, 14, 8, 144, 144);
+    ctx.fillStyle = COR.marinho;
+    ctx.font = `800 60px ${FONTE_TITULO}`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillText('LUMO WEB 3D', 176, 84);
+    textura.needsUpdate = true;
+  });
 
   // TV de métricas e relógio
-  const tv = quadro(mundo, 2.6, 1.45, -2.6, 1.95, -SALA.z + 0.1, 0, '#18181b');
+  const tv = quadro(mundo, 2.6, 1.45, -2.6, 1.95, -SALA.z + 0.1, 0, '#0b1726');
   const relogio = quadro(mundo, 0.7, 0.7, 5.1, 3.25, -SALA.z + 0.1, 0, '#2a2a2a');
 
   // Quadro branco com o fluxo da equipe (parede esquerda)
@@ -235,7 +239,8 @@ export function criarEscritorio(cena, equipe) {
   mundo.add(bebedouro);
 
   // Área de descanso: tapete, sofá, mesinha
-  bloco(mundo, 4, 0.02, 3.6, '#5b7083', -7.6, 0.01, 4.6, { sombra: false });
+  bloco(mundo, 4, 0.02, 3.6, COR.marinho, -7.6, 0.01, 4.6, { sombra: false });
+  bloco(mundo, 0.5, 0.025, 0.5, COR.laranja, -6.0, 0.012, 6.0, { sombra: false });
   const sofa = mat('#4b5563');
   bloco(mundo, 1, 0.45, 3, sofa, -9.3, 0.3, 4.6);
   bloco(mundo, 0.3, 0.9, 3, sofa, -9.75, 0.6, 4.6);

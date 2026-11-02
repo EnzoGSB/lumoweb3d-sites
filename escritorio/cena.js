@@ -22,7 +22,7 @@ rotulos.domElement.className = 'camada-rotulos';
 palco.appendChild(rotulos.domElement);
 
 const cena = new THREE.Scene();
-cena.background = new THREE.Color('#14161b');
+cena.background = new THREE.Color('#14273C'); // azul-marinho da marca
 
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
 camera.position.set(22, 20, 22);
