@@ -161,7 +161,17 @@ function quadro(pai, w, h, x, y, z, rotY, borda) {
 
 // ---------- Prédio ----------
 
-export const ALTURA_ANDAR = SALA.alturaParede + 0.2;
+export const ALTURA_ANDAR = 5.4;
+const ALTURA_VIGA = ALTURA_ANDAR - SALA.alturaParede - 0.2;
+// O andar aceso ganha este pé-direito a mais, para a laje de cima não tapar as mesas e a parede do fundo
+export const FOLGA_ANDAR_ACESO = 5;
+
+// Multiplicam a luz do andar no shader. Telas e janelas ficam de fora: a equipe segue trabalhando no escuro.
+export const LUZ = {
+  acesa: new THREE.Vector3(1, 1, 1),
+  apagada: new THREE.Vector3(0.22, 0.26, 0.36),
+  mira: new THREE.Vector3(0.48, 0.52, 0.6), // ponteiro sobre um andar apagado
+};
 
 // Placa clara (a logo original só vai sobre fundo claro) com moldura azul-marinho
 function letreiro(pai, texto) {
@@ -190,9 +200,12 @@ function estrutura(g, andar, xJanelas) {
   piso.receiveShadow = true;
   piso.castShadow = true;
   g.add(piso);
-  // Borda da laje na frente, com o número do andar
-  bloco(g, SALA.x * 2 + 0.3, 0.3, 0.3, '#3b3b3f', 0, -0.05, SALA.z + 0.15);
-  bloco(g, 0.3, 0.3, SALA.z * 2 + 0.3, '#3b3b3f', SALA.x + 0.15, -0.05, 0);
+  // Borda da laje em azul-marinho, com um friso laranja que acende junto com o andar
+  const friso = mat(COR.laranja, { emissive: COR.laranja, emissiveIntensity: 0.5 });
+  bloco(g, SALA.x * 2 + 0.3, 0.42, 0.3, COR.marinho, 0, -0.11, SALA.z + 0.15);
+  bloco(g, 0.3, 0.42, SALA.z * 2 + 0.3, COR.marinho, SALA.x + 0.15, -0.11, 0);
+  bloco(g, SALA.x * 2 + 0.3, 0.05, 0.02, friso, 0, -0.06, SALA.z + 0.31, { sombra: false });
+  bloco(g, 0.02, 0.05, SALA.z * 2 + 0.3, friso, SALA.x + 0.31, -0.06, 0, { sombra: false });
 
   const parede = mat('#eeeae4');
   bloco(g, SALA.x * 2 + 0.3, SALA.alturaParede, 0.3, parede, 0, SALA.alturaParede / 2, -SALA.z - 0.15);
@@ -200,11 +213,24 @@ function estrutura(g, andar, xJanelas) {
   bloco(g, SALA.x * 2, 0.18, 0.06, '#8a6a4a', 0, 0.09, -SALA.z + 0.03);
   bloco(g, 0.06, 0.18, SALA.z * 2, '#8a6a4a', -SALA.x + 0.03, 0.09, 0);
 
+  // Viga entre as paredes e o andar de cima, pilares e luminárias: o que faz o conjunto ler como prédio
+  const vao = [
+    { y: SALA.alturaParede, altura: ALTURA_VIGA, malha: bloco(g, SALA.x * 2 + 0.3, ALTURA_VIGA, 0.3, COR.marinho, 0, 0, -SALA.z - 0.15, { sombra: false }) },
+    { y: SALA.alturaParede, altura: ALTURA_VIGA, malha: bloco(g, 0.3, ALTURA_VIGA, SALA.z * 2, COR.marinho, -SALA.x - 0.15, 0, 0, { sombra: false }) },
+  ];
+  for (const [x, z] of [[SALA.x + 0.15, SALA.z + 0.15], [SALA.x + 0.15, -SALA.z - 0.15], [-SALA.x - 0.15, SALA.z + 0.15]]) {
+    vao.push({ y: 0, altura: ALTURA_ANDAR - 0.2, malha: bloco(g, 0.3, ALTURA_ANDAR - 0.2, 0.3, COR.marinho, x, 0, z, { sombra: false }) });
+  }
+  // Sanca de luz no alto das paredes
+  const lampada = mat(COR.branco, { emissive: '#ffe7b8', emissiveIntensity: 1.6 });
+  bloco(g, SALA.x * 2, 0.1, 0.1, lampada, 0, SALA.alturaParede - 0.1, -SALA.z + 0.06, { sombra: false });
+  bloco(g, 0.1, 0.1, SALA.z * 2, lampada, -SALA.x + 0.06, SALA.alturaParede - 0.1, 0, { sombra: false });
+
   const vidros = xJanelas.map((x) => janela(g, x));
   letreiro(g, andar.placa);
   const tv = quadro(g, 2.6, 1.45, -2.6, 1.95, -SALA.z + 0.1, 0, '#0b1726');
   const relogio = quadro(g, 0.7, 0.7, 5.1, 3.25, -SALA.z + 0.1, 0, '#2a2a2a');
-  return { vidros, tv, relogio };
+  return { vidros, tv, relogio, vao };
 }
 
 function mesasDoAndar(g, equipe) {
@@ -467,6 +493,83 @@ function andarImpressao3D(g) {
 const DECORACAO = { 1: andarMarketing, 2: andarImpressao3D };
 const JANELAS = { 1: [-7.4, 2.5, 7.6], 2: [-7.4, 2.5] };
 
+/** Estica viga, pilares e volume do andar conforme a folga do pé-direito. */
+export function abrirVao(andar, folga) {
+  for (const { malha, y, altura } of [...andar.vao, { malha: andar.volume, y: -0.3, altura: ALTURA_ANDAR }]) {
+    malha.scale.y = (altura + folga) / altura;
+    malha.position.y = y + (altura + folga) / 2;
+  }
+}
+
+// Base em degraus (a geometria da logo) sob o térreo
+function base(cena) {
+  const g = new THREE.Group();
+  [[3.2, '#2a4766'], [2, '#223c58'], [0.8, COR.marinho]].forEach(([folga, cor], i) =>
+    bloco(g, SALA.x * 2 + folga * 2, 0.3, SALA.z * 2 + folga * 2, cor, 0, -0.47 - (2 - i) * 0.3, 0, { sombra: false }),
+  );
+  cena.add(g);
+}
+
+// Cobertura com a logo original sobre placa clara
+function cobertura(cena, y) {
+  const g = new THREE.Group();
+  g.position.y = y;
+  bloco(g, SALA.x * 2 + 0.6, 0.4, SALA.z * 2 + 0.6, COR.marinho, 0, -0.1, 0, { sombra: false });
+  bloco(g, SALA.x * 2 - 0.4, 0.04, SALA.z * 2 - 0.4, '#3a6088', 0, 0.12, 0, { sombra: false });
+  // Mureta
+  for (const [w, d, x, z] of [
+    [SALA.x * 2 + 0.6, 0.3, 0, SALA.z + 0.15],
+    [SALA.x * 2 + 0.6, 0.3, 0, -SALA.z - 0.15],
+    [0.3, SALA.z * 2 + 0.6, SALA.x + 0.15, 0],
+    [0.3, SALA.z * 2 + 0.6, -SALA.x - 0.15, 0],
+  ]) bloco(g, w, 0.5, d, COR.branco, x, 0.35, z, { sombra: false });
+  // Casas de máquinas em degrau
+  bloco(g, 3.2, 1, 2.2, COR.marinho, 6.4, 0.6, -3.8, { sombra: false });
+  bloco(g, 1.6, 0.5, 2.2, COR.laranja, 7.2, 1.35, -3.8, { sombra: false });
+
+  bloco(g, 0.2, 1.2, 0.2, COR.marinho, -3, 0.7, -SALA.z + 0.5, { sombra: false });
+  bloco(g, 0.2, 1.2, 0.2, COR.marinho, 5, 0.7, -SALA.z + 0.5, { sombra: false });
+  const placa = quadro(g, 9, 2.25, 1, 2.3, -SALA.z + 0.5, 0, COR.marinho);
+  marcaPronta.then(() => {
+    const { ctx, canvas, textura } = placa;
+    ctx.fillStyle = COR.branco;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(logo, 30, 22, 406, 406);
+    ctx.fillStyle = COR.marinho;
+    ctx.font = `800 170px ${FONTE_TITULO}`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillText('LUMO WEB 3D', 450, 235);
+    textura.needsUpdate = true;
+  });
+  cena.add(g);
+  return g;
+}
+
+// Cada material do andar passa a multiplicar a luz pelo valor do andar (ver LUZ)
+function escurecivel(uniforme) {
+  return (shader) => {
+    shader.uniforms.uLuz = uniforme;
+    shader.fragmentShader = `uniform vec3 uLuz;\n${shader.fragmentShader}`.replace(
+      '#include <opaque_fragment>',
+      'outgoingLight *= uLuz;\n#include <opaque_fragment>',
+    );
+  };
+}
+
+/** Prepara a luz do andar. Chamar depois que os bonequinhos entraram no grupo, para pegá-los também. */
+export function instalarLuz(andar) {
+  andar.luz = { value: LUZ.apagada.clone() };
+  andar.sombras = [];
+  andar.grupo.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.castShadow) andar.sombras.push(o);
+    for (const material of [o.material].flat()) {
+      if (material.isMeshStandardMaterial && !andar.vidros.includes(material)) material.onBeforeCompile = escurecivel(andar.luz);
+    }
+  });
+}
+
 /**
  * Monta o prédio: um grupo por andar, empilhados. Cada andar tem mesas para a sua equipe,
  * pontos de passeio (com nome prefixado pelo andar) e animações próprias.
@@ -478,12 +581,19 @@ export function criarPredio(cena, andares, equipe) {
     g.position.y = (andar.numero - 1) * ALTURA_ANDAR;
     cena.add(g);
 
-    const base = estrutura(g, andar, JANELAS[andar.numero] ?? [-7.4, 2.5, 7.6]);
+    const estruturaAndar = estrutura(g, andar, JANELAS[andar.numero] ?? [-7.4, 2.5, 7.6]);
     const extra = (DECORACAO[andar.numero] ?? (() => ({ pontos: [], animacoes: [] })))(g);
     const mesas = mesasDoAndar(g, equipe.filter((m) => m.andar === andar.numero));
     const pontos = extra.pontos.map((p) => ({ ...p, nome: `a${andar.numero}-${p.nome}` }));
 
-    predio.set(andar.numero, { ...andar, grupo: g, ...base, ...extra, pontos, mesas });
+    // Volume invisível para saber em qual andar o ponteiro está
+    const volume = new THREE.Mesh(new THREE.BoxGeometry(SALA.x * 2 + 0.6, ALTURA_ANDAR, SALA.z * 2 + 0.6));
+    volume.visible = false;
+    volume.userData.andar = andar.numero;
+    g.add(volume);
+
+    predio.set(andar.numero, { ...andar, grupo: g, ...estruturaAndar, ...extra, pontos, mesas, volume });
   }
-  return predio;
+  base(cena);
+  return { predio, cobertura: cobertura(cena, Math.max(...andares.map((a) => a.numero)) * ALTURA_ANDAR) };
 }

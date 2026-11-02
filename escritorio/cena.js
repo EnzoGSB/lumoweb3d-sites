@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { criarPredio, ALTURA_ANDAR, SALA } from './mundo.js';
+import { criarPredio, instalarLuz, abrirVao, ALTURA_ANDAR, FOLGA_ANDAR_ACESO, LUZ, SALA } from './mundo.js';
 import { Funcionario, ROTULOS } from './funcionario.js';
+import { montarFiltros } from './filtros-leo.js';
 import { desenharMonitor, desenharTV, desenharTV3D, desenharRelogio, desenharFluxo } from './telas.js';
 
 const $ = (s) => document.querySelector(s);
@@ -24,17 +25,18 @@ palco.appendChild(rotulos.domElement);
 const cena = new THREE.Scene();
 cena.background = new THREE.Color('#14273C'); // azul-marinho da marca
 
+const ZOOM_ANDAR = 0.8;
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
-camera.position.set(22, 20.5, 22);
-camera.zoom = 1.08;
+camera.position.set(22, 11, 22); // ângulo baixo: de frente para o corte do prédio, como casa de bonecas
+camera.zoom = ZOOM_ANDAR;
 
 const controles = new OrbitControls(camera, rotulos.domElement);
 controles.target.set(0, 0.5, 0);
 controles.enableDamping = true;
 controles.minZoom = 0.45;
 controles.maxZoom = 3;
-controles.minPolarAngle = 0.55;
-controles.maxPolarAngle = 1.2;
+controles.minPolarAngle = 0.95; // mais alto que isso, a laje de cima tapa o andar aceso
+controles.maxPolarAngle = 1.35;
 controles.minAzimuthAngle = 0.15;
 controles.maxAzimuthAngle = 1.42;
 controles.screenSpacePanning = true;
@@ -47,7 +49,7 @@ sol.castShadow = true;
 sol.shadow.mapSize.set(2048, 2048);
 Object.assign(sol.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, near: 1, far: 70 });
 sol.shadow.bias = -0.0005;
-cena.add(sol);
+cena.add(sol, sol.target);
 
 function ajustarTamanho() {
   const w = palco.clientWidth;
@@ -68,6 +70,7 @@ ajustarTamanho();
 // ---------- Dados ----------
 let estado = null;
 let predio = null; // Map<numero do andar, andar>
+let cobertura = null;
 const funcionarios = new Map();
 const placasAndar = new Map();
 
@@ -91,19 +94,21 @@ const doAndar = (n) => estado.agentes.filter((a) => a.andar === n);
 const numero = (n) => String(n).padStart(2, '0');
 
 function montarPredio() {
-  predio = criarPredio(cena, estado.andares, estado.agentes);
+  ({ predio, cobertura } = criarPredio(cena, estado.andares, estado.agentes));
   for (const a of estado.agentes) {
     const andar = predio.get(a.andar);
     funcionarios.set(a.id, new Funcionario(a, andar.mesas.get(a.id), andar.grupo, andar.pontos, abrirDetalhe));
   }
 
-  // Placas dos andares (aparecem na vista do prédio)
+  // Placas dos andares (aparecem nos andares apagados e na vista do prédio)
   for (const andar of predio.values()) {
+    instalarLuz(andar);
+    andar.folga = 0;
     const el = document.createElement('button');
     el.className = 'placa-andar';
     el.addEventListener('click', () => mudarVista(andar.numero));
     const placa = new CSS2DObject(el);
-    placa.position.set(SALA.x - 1.5, 1.2, SALA.z);
+    placa.position.set(SALA.x - 1.5, 3.2, SALA.z);
     andar.grupo.add(placa);
     placasAndar.set(andar.numero, placa);
   }
@@ -154,7 +159,7 @@ function vistaSalva() {
   return 1;
 }
 
-function andarVisivel(n) {
+function andarAceso(n) {
   return vista === 'predio' || vista === n;
 }
 
@@ -164,24 +169,45 @@ function mudarVista(nova, animar = true) {
     localStorage.setItem('escritorio-vista', String(nova));
   } catch {}
 
-  for (const andar of predio.values()) andar.grupo.visible = andarVisivel(andar.numero);
-  // Na vista do prédio os andares se sobrepõem: troca os crachás pelas placas de cada andar
-  for (const f of funcionarios.values()) f.etiqueta.visible = vista !== 'predio' && andarVisivel(f.membro.andar);
-  for (const placa of placasAndar.values()) placa.visible = vista === 'predio';
+  // Todos os andares seguem na cena e trabalhando: a vista só decide qual fica de luz acesa.
+  // Crachás só no andar aceso; os apagados mostram a placa com o que está acontecendo lá.
+  for (const f of funcionarios.values()) f.etiqueta.visible = vista === f.membro.andar;
+  for (const [n, placa] of placasAndar) placa.visible = vista === 'predio' || vista !== n;
 
-  const topo = (predio.size - 1) * ALTURA_ANDAR;
+  // O sol acompanha o andar aceso, e só ele projeta sombra: senão a laje de cima escureceria o de baixo
+  const yAceso = vista === 'predio' ? 0 : (vista - 1) * ALTURA_ANDAR;
+  sol.position.y = 26 + yAceso;
+  sol.target.position.y = yAceso;
+  for (const andar of predio.values()) {
+    for (const m of andar.sombras) m.castShadow = vista === andar.numero;
+  }
+
+  const topo = predio.size * ALTURA_ANDAR;
   alvoCamera =
     vista === 'predio'
-      ? { y: topo / 2 + 1.5, zoom: 0.62 }
-      : { y: (vista - 1) * ALTURA_ANDAR + 0.5, zoom: 1.08 };
+      ? { y: topo / 2 + 1.5, zoom: Math.min(ZOOM_ANDAR, 21 / (topo + 15)) }
+      : { y: yAceso + 4, zoom: ZOOM_ANDAR };
   if (!animar) {
     moverCamera(1);
     alvoCamera = null;
+    moverAndares(1);
   }
 
   document.querySelectorAll('#andares button').forEach((b) => b.classList.toggle('ativo', b.dataset.vista === String(vista)));
   document.body.dataset.vista = String(vista);
   if (estado) atualizarHud();
+}
+
+// Abre o pé-direito do andar aceso e empurra para cima o que está acima dele
+function moverAndares(k) {
+  let subida = 0;
+  for (const andar of predio.values()) {
+    andar.folga += ((vista === andar.numero ? FOLGA_ANDAR_ACESO : 0) - andar.folga) * k;
+    andar.grupo.position.y = (andar.numero - 1) * ALTURA_ANDAR + subida;
+    abrirVao(andar, andar.folga);
+    subida += andar.folga;
+  }
+  cobertura.position.y = predio.size * ALTURA_ANDAR + subida;
 }
 
 // Desliza alvo e câmera juntos (mantendo o ângulo que a pessoa escolheu) e ajusta o zoom
@@ -209,14 +235,26 @@ $('#andares').addEventListener('click', (e) => {
 const fmtHora = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
+// Servidor sem o expediente (versão pública ou aberto antes desta versão): sem seletores
+const comSeletores = () => !PUBLICO && Boolean(estado.expediente);
+
+// Seletor do agente: ligado = não para nunca; desligado = pausa autorizada (só no escritório local)
+function seletorMembro(a) {
+  if (a.vaga || !comSeletores()) return '';
+  return `<button class="seletor" role="switch" data-agente="${a.id}" aria-checked="${a.ligado}"
+        aria-label="${esc(a.nome)}: ${a.ligado ? 'trabalhando sem parar' : 'em pausa'}" title="${a.ligado ? 'Autorizar pausa' : 'Chamar de volta ao trabalho'}"></button>`;
+}
+
 function cartaoMembro(a) {
   return `
-      <li><button class="membro" data-id="${a.id}" data-estado="${a.estado}" style="--cor:${a.cor}">
+      <li class="linha-membro">${seletorMembro(a)}<button class="membro" data-id="${a.id}" data-estado="${a.estado}" style="--cor:${a.cor}">
         <span class="avatar">${esc((a.nome ?? '?')[0])}</span>
         <span class="info"><b>${esc(a.nome ?? 'Vaga aberta')}</b><small>${esc(a.cargo)} · <code>${esc(a.pasta)}</code></small></span>
         <span class="selo">${ROTULOS[a.estado] ?? a.estado}</span>
       </button></li>`;
 }
+
+let equipeDesenhada = '';
 
 function atualizarHud() {
   const ativos = estado.agentes.filter((a) => a.estado === 'trabalhando').length;
@@ -226,17 +264,31 @@ function atualizarHud() {
   $('#m-fila').textContent = estado.leads.naFila;
   $('#m-ativos').textContent = `${ativos}/${contratados}`;
 
+  if (comSeletores()) {
+    const empresa = estado.expediente.empresa;
+    $('#expediente').hidden = false;
+    $('#expediente').classList.toggle('encerrado', !empresa);
+    $('#expediente-texto').textContent = empresa ? 'Ninguém para sem a sua ordem' : 'Empresa parada. Ligue para retomar';
+    $('#seletor-empresa').setAttribute('aria-checked', String(empresa));
+    $('#seletor-empresa').title = empresa ? 'Parar a empresa toda' : 'Retomar o expediente';
+  }
+
   // Equipe agrupada por andar; o andar em foco vem primeiro
   const ordem = [...estado.andares].sort((a, b) => (b.numero === vista) - (a.numero === vista));
-  $('#equipe').innerHTML = ordem
+  // Só refaz a lista se algo mudou: refazer a cada 2 s engoliria cliques e tiraria o foco dos seletores
+  const equipeHtml = ordem
     .map(
       (andar) => `
-      <li class="grupo-andar${andarVisivel(andar.numero) ? '' : ' fora'}">
+      <li class="grupo-andar${andarAceso(andar.numero) ? '' : ' fora'}">
         <button data-vista="${andar.numero}"><b>${numero(andar.numero)}</b> ${esc(andar.nome)}</button>
         <ul>${doAndar(andar.numero).map(cartaoMembro).join('')}</ul>
       </li>`,
     )
     .join('');
+  if (equipeHtml !== equipeDesenhada) {
+    equipeDesenhada = equipeHtml;
+    $('#equipe').innerHTML = equipeHtml;
+  }
 
   $('#sites').innerHTML = estado.sites.length
     ? estado.sites
@@ -258,13 +310,30 @@ function atualizarHud() {
     : '<li class="vazio">Sem atividade ainda.</li>';
 }
 
+async function mudarExpediente(pedido) {
+  try {
+    await fetch('/api/expediente', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(pedido),
+    });
+    await buscarEstado();
+  } catch {
+    document.body.classList.add('desconectado');
+  }
+}
+
+$('#seletor-empresa').addEventListener('click', () => mudarExpediente({ empresa: !estado.expediente.empresa }));
+
 $('#equipe').addEventListener('click', (e) => {
+  const seletor = e.target.closest('.seletor');
+  if (seletor) return mudarExpediente({ agente: seletor.dataset.agente, ligado: seletor.getAttribute('aria-checked') !== 'true' });
   const andar = e.target.closest('.grupo-andar > button')?.dataset.vista;
   if (andar) return mudarVista(Number(andar));
   const id = e.target.closest('.membro')?.dataset.id;
   if (!id) return;
   const f = funcionarios.get(id);
-  if (!andarVisivel(f.membro.andar) || vista === 'predio') mudarVista(f.membro.andar);
+  if (vista !== f.membro.andar) mudarVista(f.membro.andar);
   abrirDetalhe(f);
 });
 
@@ -289,10 +358,10 @@ function abrirDetalhe(f) {
       ${linha('Andar', andar ? `${numero(andar.numero)} · ${esc(andar.nome)}` : null)}
       ${linha('Pasta', `<code>${esc(a.pasta)}</code>`)}
       ${linha('Situação', ROTULOS[a.estado] ?? a.estado)}
-      ${linha('Fazendo agora', a.estado === 'trabalhando' || a.estado === 'erro' ? esc(s.tarefa) : null)}
+      ${linha('Fazendo agora', ['trabalhando', 'plantao', 'erro'].includes(a.estado) ? esc(s.tarefa) : null)}
       ${linha('Lead atual', esc(s.leadAtual))}
       ${linha('Fila', s.fila)}
-      ${linha('Próxima execução', s.proximaExecucao && a.estado !== 'offline' ? fmtHora(s.proximaExecucao) : null)}
+      ${linha('Próxima execução', s.proximaExecucao && a.estado === 'plantao' ? fmtHora(s.proximaExecucao) : null)}
       ${linha('Último sinal', s.atualizadoEm ? `${new Date(s.atualizadoEm).toLocaleDateString('pt-BR')} ${fmtHora(s.atualizadoEm)}` : null)}
     </dl>
     ${
@@ -323,8 +392,17 @@ function montarTerminal(a) {
     return;
   }
 
+  const comFormulario = a.terminal.formulario && !PUBLICO;
   area.innerHTML = `
-    <h3>Terminal</h3>
+    ${
+      comFormulario
+        ? `<div class="abas-leo" role="tablist">
+             <button type="button" role="tab" data-aba="filtros">Filtros</button>
+             <button type="button" role="tab" data-aba="terminal">Terminal</button>
+           </div>
+           <div class="painel-filtros"></div>`
+        : '<h3>Terminal</h3>'
+    }
     <div class="terminal" role="log" aria-live="polite">
       <div class="saida"></div>
       <form class="linha-comando" autocomplete="off">
@@ -347,7 +425,7 @@ function montarTerminal(a) {
     escrever(`Digite o que o ${a.nome} deve buscar no Google Maps. Exemplos:`);
     escrever(`  ${a.terminal.exemplo}`);
     escrever('  Academias em Pinheiros --headless   (sem abrir a janela do navegador)');
-    escrever('Comandos: parar · limpar · ajuda');
+    escrever(`Comandos: parar · limpar · ajuda${a.terminal.login ? ' · entrar (login do Google)' : ''}`);
   };
 
   if (PUBLICO) {
@@ -358,14 +436,59 @@ function montarTerminal(a) {
     return;
   }
 
+  const pedir = async (corpo) => {
+    try {
+      const resp = await fetch(`/api/terminal/${a.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(corpo),
+      });
+      return await resp.json();
+    } catch {
+      return { ok: false, mensagem: 'Sem conexão com o servidor do escritório.' };
+    }
+  };
+
+  const terminalEl = area.querySelector('.terminal');
+  const mostrarAba = (aba) => {
+    if (!comFormulario) return;
+    area.querySelector('.painel-filtros').hidden = aba !== 'filtros';
+    terminalEl.hidden = aba !== 'terminal';
+    for (const b of area.querySelectorAll('[data-aba]')) b.setAttribute('aria-selected', String(b.dataset.aba === aba));
+    if (aba === 'terminal') {
+      saida.scrollTop = saida.scrollHeight;
+      input.focus();
+    }
+  };
+  area.querySelector('.abas-leo')?.addEventListener('click', (e) => {
+    const aba = e.target.closest('[data-aba]')?.dataset.aba;
+    if (aba) mostrarAba(aba);
+  });
+
+  // Ao iniciar, vai para o terminal para acompanhar; erro de validação fica no formulário
+  const pedirEAcompanhar = async (corpo) => {
+    const r = await pedir(corpo);
+    if (r.ok) mostrarAba('terminal');
+    else formulario.erro(r.mensagem);
+  };
+  const formulario = comFormulario
+    ? montarFiltros(area.querySelector('.painel-filtros'), {
+        aoBuscar: (filtros) => pedirEAcompanhar({ filtros }),
+        aoEntrar: () => pedirEAcompanhar({ comando: 'entrar' }),
+        aoParar: () => pedir({ comando: 'parar' }),
+      })
+    : null;
+  mostrarAba('filtros');
+
   ajuda();
   fluxoTerminal = new EventSource(`/api/terminal/${a.id}`);
   fluxoTerminal.onmessage = (e) => {
     const ev = JSON.parse(e.data);
     if (ev.tipo === 'linha') escrever(ev.texto, ev.fluxo);
     if (ev.tipo === 'estado') {
-      area.querySelector('.terminal').classList.toggle('rodando', ev.rodando);
+      terminalEl.classList.toggle('rodando', ev.rodando);
       input.placeholder = ev.rodando ? 'Rodando… digite "parar" para interromper' : a.terminal.exemplo;
+      formulario?.atualizar(ev);
     }
   };
 
@@ -387,30 +510,42 @@ function montarTerminal(a) {
     input.value = '';
     if (comando === 'limpar') return void (saida.innerHTML = '');
     if (comando === 'ajuda') return ajuda();
-    try {
-      const resp = await fetch(`/api/terminal/${a.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comando }),
-      });
-      const r = await resp.json();
-      if (!r.ok && r.mensagem) escrever(r.mensagem, 'erro');
-    } catch {
-      escrever('Sem conexão com o servidor do escritório.', 'erro');
-    }
+    const r = await pedir({ comando });
+    if (!r.ok && r.mensagem) escrever(r.mensagem, 'erro');
   });
-  setTimeout(() => input.focus(), 50);
+  if (!comFormulario) setTimeout(() => input.focus(), 50);
 }
 
-// Clique direto no bonequinho (só nos andares à mostra)
+// Clique direto no prédio: um andar apagado acende; no andar aceso, o bonequinho abre o detalhe
 const raio = new THREE.Raycaster();
-rotulos.domElement.addEventListener('click', (e) => {
-  if (vista === 'predio') return;
+let andarNaMira = null;
+let inicioClique = null;
+
+function mirar(e) {
   const r = rotulos.domElement.getBoundingClientRect();
   raio.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
-  const alvo = raio
-    .intersectObjects(cena.children, true)
-    .find((i) => i.object.userData.funcionario && andarVisivel(i.object.userData.funcionario.membro.andar));
+  return raio.intersectObjects([...predio.values()].map((a) => a.volume))[0]?.object.userData.andar ?? null;
+}
+
+// Crachás e placas ficam fora do OrbitControls: ele captura o ponteiro e o clique nunca chegaria neles
+rotulos.domElement.addEventListener('pointerdown', (e) => {
+  if (e.target.closest('.etiqueta, .placa-andar')) e.stopPropagation();
+}, true);
+rotulos.domElement.addEventListener('pointerdown', (e) => (inicioClique = { x: e.clientX, y: e.clientY }));
+rotulos.domElement.addEventListener('pointermove', (e) => {
+  if (!predio || e.buttons) return;
+  andarNaMira = mirar(e);
+  rotulos.domElement.style.cursor = andarNaMira && andarNaMira !== vista ? 'pointer' : '';
+});
+rotulos.domElement.addEventListener('pointerleave', () => (andarNaMira = null));
+rotulos.domElement.addEventListener('click', (e) => {
+  // Arrastar para girar a câmera também termina em clique
+  if (!predio || !inicioClique || Math.hypot(e.clientX - inicioClique.x, e.clientY - inicioClique.y) > 5) return;
+  if (e.target.closest('.etiqueta, .placa-andar')) return;
+  const n = mirar(e);
+  if (!n) return;
+  if (n !== vista) return mudarVista(n);
+  const alvo = raio.intersectObject(predio.get(n).grupo, true).find((i) => i.object.userData.funcionario?.presente);
   if (alvo) abrirDetalhe(alvo.object.userData.funcionario);
 });
 
@@ -445,9 +580,12 @@ function quadro() {
   controles.update();
 
   if (predio && estado) {
+    moverAndares(Math.min(1, dt * 6));
     for (const f of funcionarios.values()) f.atualizar(dt);
     for (const andar of predio.values()) {
-      if (andar.grupo.visible) for (const animar of andar.animacoes) animar(t);
+      for (const animar of andar.animacoes) animar(t);
+      const luz = andarAceso(andar.numero) ? LUZ.acesa : andarNaMira === andar.numero ? LUZ.mira : LUZ.apagada;
+      andar.luz.value.lerp(luz, Math.min(1, dt * 6));
     }
 
     acumTelas += dt;
@@ -455,7 +593,7 @@ function quadro() {
       acumTelas = 0;
       for (const a of estado.agentes) {
         const f = funcionarios.get(a.id);
-        if (!f || !andarVisivel(a.andar)) continue;
+        if (!f) continue;
         desenharMonitor(f.mesa.tela, a, t);
         f.mesa.brilho.intensity = a.estado === 'trabalhando' ? 1.2 : 0;
       }

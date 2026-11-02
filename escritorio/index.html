@@ -37,6 +37,10 @@
   </header>
 
   <aside class="painel">
+    <div id="expediente" class="expediente" hidden>
+      <div><b>Expediente</b><small id="expediente-texto"></small></div>
+      <button id="seletor-empresa" class="seletor" role="switch" aria-checked="true" aria-label="Expediente da empresa toda"></button>
+    </div>
     <section>
       <h2>Equipe</h2>
       <ul id="equipe" class="equipe"></ul>
@@ -57,7 +61,7 @@
     <div class="area-terminal"></div>
   </div>
 
-  <p class="dica">Arraste para girar · botão direito move · roda dá zoom · clique num funcionário</p>
+  <p class="dica">Clique num andar para acender a luz · arraste para girar · botão direito move · roda dá zoom · clique num funcionário</p>
   <p class="aviso-offline">Sem conexão com o servidor do escritório…</p>
 
   <script type="module" src="cena.js"></script>

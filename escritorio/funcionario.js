@@ -10,6 +10,7 @@ const ocupados = new Set();
 
 const ROTULO_ESTADO = {
   trabalhando: 'Trabalhando',
+  plantao: 'No posto',
   ocioso: 'Pausa',
   erro: 'Com problema',
   offline: 'Fora do expediente',
@@ -111,9 +112,11 @@ export class Funcionario {
     const texto =
       this.estado === 'trabalhando' || this.estado === 'erro'
         ? tarefa
-        : this.estado === 'ocioso' && this.membro.daemon && this.status?.proximaExecucao
+        : this.estado === 'plantao' && this.membro.daemon && this.status?.proximaExecucao
           ? `Próximo site às ${new Date(this.status.proximaExecucao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-          : ROTULO_ESTADO[this.estado];
+          : this.estado === 'plantao'
+            ? tarefa || ROTULO_ESTADO.plantao
+            : ROTULO_ESTADO[this.estado];
     this.elBalao.textContent = texto.length > 46 ? `${texto.slice(0, 45)}…` : texto;
 
     if (mudou && !this.membro.vaga) this.decidir(true);
@@ -138,9 +141,14 @@ export class Funcionario {
       this.etiqueta.position.set(0, 2.3, 0);
     }
 
-    if (this.estado === 'trabalhando') {
-      if (this.destino?.nome !== `mesa-${this.membro.id}`) this.irPara(this.assentoDaMesa());
-      else if (this.chegou) this.boneco.definirPose('digitando');
+    if (this.estado === 'trabalhando' || this.estado === 'plantao') {
+      // No posto: só sai da mesa quando o seletor autorizar a pausa
+      const pose = this.estado === 'trabalhando' ? 'digitando' : 'sentado';
+      if (this.destino?.nome !== `mesa-${this.membro.id}`) this.irPara({ ...this.assentoDaMesa(), pose });
+      else {
+        this.destino.pose = pose;
+        if (this.chegou) this.boneco.definirPose(pose);
+      }
     } else if (this.estado === 'erro') {
       const { x, rot } = this.mesa.assento;
       if (this.destino?.nome !== `erro-${this.membro.id}`) {

@@ -143,7 +143,7 @@ export function desenharMonitor(tela, agente, t) {
     else telaGenerica(ctx, w, h, t);
   } else if (agente.estado === 'erro') {
     telaErro(ctx, w, h, t, agente.status);
-  } else if (agente.estado === 'ocioso') {
+  } else if (agente.estado === 'ocioso' || agente.estado === 'plantao') {
     descanso(ctx, w, h, t);
   } else {
     fundo(ctx, w, h, '#050505');
